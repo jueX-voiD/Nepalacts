@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 
 import io
@@ -67,7 +66,7 @@ PAGE = """
 
     <label for="url">Post URL</label>
     <input id="url" type="text" placeholder="https://nepalacts.com/voices/..."
-           value="https://nepalacts.com/voices/birgunj-mayor-singh-arrested">
+           value="">
 
     <button id="go">Generate &amp; Download</button>
     <div id="status" class="status"></div>

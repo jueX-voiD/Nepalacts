@@ -39,8 +39,8 @@ LOGO_PNG    = Path(__file__).parent / "fonts" / "_logo_cached.png"
 LOGO_W      = 814       # rendered pixel width
 
 # ── Fonts ────────────────────────────────────────────────────────────────────
-# English: Raleway ExtraBold (Latin sans-serif)
-# Nepali:  Mukta ExtraBold (full Devanagari support)
+# English: Abhaya Libre ExtraBold (serif, matches the reference design)
+# Nepali:  Mukta ExtraBold (the Devanagari font nepalacts.com itself uses)
 FONTS_DIR = Path(__file__).parent / "fonts"
 
 
@@ -53,7 +53,7 @@ def _font(name: str) -> Path:
     return Path.home() / "Library/Fonts" / name
 
 
-FONT_EN_PATH = _font("Raleway-VariableFont_wght.ttf")
+FONT_EN_PATH = _font("AbhayaLibre-ExtraBold.ttf")
 FONT_NP_PATH = _font("Mukta-ExtraBold.ttf")
 FONT_EN_SIZE = 112
 FONT_EN_LH   = 128
