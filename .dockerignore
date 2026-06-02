@@ -1,0 +1,9 @@
+.git/
+output/
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+.venv/
+fonts/AbhayaLibre-ExtraBold.woff2
+fonts/Raleway-ExtraBold.woff
