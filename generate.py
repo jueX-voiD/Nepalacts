@@ -40,7 +40,7 @@ LOGO_W      = 814       # rendered pixel width
 
 # ── Fonts ────────────────────────────────────────────────────────────────────
 # English: Abhaya Libre ExtraBold (serif, matches the reference design)
-# Nepali:  Mukta ExtraBold (the Devanagari font nepalacts.com itself uses)
+# Nepali:  Noto Serif Devanagari Variable (the new Nepali font)
 FONTS_DIR = Path(__file__).parent / "fonts"
 
 
@@ -54,7 +54,7 @@ def _font(name: str) -> Path:
 
 
 FONT_EN_PATH = _font("AbhayaLibre-ExtraBold.ttf")
-FONT_NP_PATH = _font("Mukta-ExtraBold.ttf")
+FONT_NP_PATH = _font("NotoSerifDevanagari-VariableFont_wdth,wght.ttf")
 FONT_EN_SIZE = 112
 FONT_EN_LH   = 128
 FONT_NP_SIZE = 120
@@ -79,9 +79,9 @@ def check_fonts():
         )
     if not FONT_NP_PATH.exists():
         missing.append(
-            "Raleway-ExtraBold.ttf\n"
-            "    Download → https://fonts.google.com/specimen/Raleway\n"
-            "    Place in:  fonts/Raleway-ExtraBold.ttf"
+            "NotoSerifDevanagari-VariableFont_wdth,wght.ttf\n"
+            "    Download → https://fonts.google.com/noto/specimen/Noto+Serif+Devanagari\n"
+            "    Place in:  fonts/NotoSerifDevanagari-VariableFont_wdth,wght.ttf"
         )
     if missing:
         print("\nMissing fonts. Please install them:\n")
