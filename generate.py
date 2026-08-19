@@ -50,7 +50,8 @@ LAYOUTS = {
     },
     "Stories": {
         "canvas_w": 1926, "canvas_h": 3424,
-        "content_from_bottom": 350,   # title box bottom, px from canvas bottom
+        "logo_bottom":     350,       # logo bottom margin from the canvas bottom
+        "logo_w": 537, "logo_h": 75,  # logo display size for this variant
         "logo_title_gap":  107,
         "block_left":      160.5,
         "text_margin_r":   215.75,
@@ -394,17 +395,14 @@ def generate_image(
     img = apply_gradient(img)
     draw = ImageDraw.Draw(img)
 
-    # 2. Logo + title bottom.  Post anchors the logo to the canvas bottom and puts
-    #    the title above it; Stories anchors the title box a fixed distance from the
-    #    bottom and puts the logo below it. Both keep a `logo_title_gap`.
-    logo   = render_logo()
+    # 2. Logo anchored `logo_bottom` px above the canvas bottom; the title sits
+    #    `logo_title_gap` above the logo. Optionally resize the logo per variant.
+    logo = render_logo()
+    if "logo_w" in layout:
+        logo = logo.resize((layout["logo_w"], layout["logo_h"]), Image.LANCZOS)
     logo_x = round(layout["block_left"])
-    if "content_from_bottom" in layout:
-        content_bottom = H - layout["content_from_bottom"]
-        logo_y = round(content_bottom + layout["logo_title_gap"])
-    else:
-        logo_y = H - layout["logo_bottom"] - logo.height
-        content_bottom = logo_y - layout["logo_title_gap"]
+    logo_y = H - layout["logo_bottom"] - logo.height
+    content_bottom = logo_y - layout["logo_title_gap"]
     img.paste(logo, (logo_x, logo_y), logo)
 
     # 3. Title — each line vertically centered within its line box.
