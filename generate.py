@@ -42,7 +42,7 @@ TITLE_PAD_Y    = 15            # top & bottom spacing around the title text box
 TAG_BG         = "#145C9E"     # blue background
 TAG_TEXT_COLOR = "#ffffff"
 TAG_PAD_X      = 35            # left/right padding inside the tag
-TAG_PAD_Y      = 20            # top/bottom padding inside the tag
+TAG_BOX_H      = 87            # fixed tag box height (text centered; padding is variable)
 TAG_TITLE_GAP  = 50            # gap between the tag bottom and the red line top
 
 # ── Gradient (#181D21, 90% opacity → 0%, bottom → mid-canvas) ───────────────
@@ -81,6 +81,7 @@ LANG = {
         "tag_weight":   600,        # SemiBold (variable axis)
         "tag_size":     40,
         "tag_tracking": 0.10,       # 10% letter-spacing
+        "tag_upper":    True,       # ALL CAPS
     },
     "ne": {
         "title_font":   _font("Mukta-Bold.ttf"),
@@ -410,16 +411,15 @@ def generate_image(
         fill=hex_to_rgba(RED_LINE_COLOR),
     )
 
-    # 5. Category tag — box with auto line-height and 10% letter-spacing
+    # 5. Category tag — fixed-height box (87px) with the text centered vertically
     if tag_text:
+        label    = tag_text.upper() if cfg.get("tag_upper") else tag_text
         tag_font = load_font(cfg["tag_font"], cfg["tag_size"], cfg.get("tag_weight"))
         tracking = cfg.get("tag_tracking", 0.0) * cfg["tag_size"]
-        ascent, descent = tag_font.getmetrics()
-        line_h = ascent + descent                       # "auto" line height
-        text_w = tracked_width(draw, tag_text, tag_font, tracking)
+        text_w   = tracked_width(draw, label, tag_font, tracking)
 
         box_w      = text_w + 2 * TAG_PAD_X
-        box_h      = line_h + 2 * TAG_PAD_Y
+        box_h      = TAG_BOX_H
         box_left   = BLOCK_LEFT
         box_bottom = red_top - TAG_TITLE_GAP            # 50px above the red line top
         box_top    = box_bottom - box_h
@@ -428,10 +428,12 @@ def generate_image(
             [box_left, box_top, box_left + box_w, box_bottom],
             fill=hex_to_rgba(TAG_BG),
         )
-        # Baseline sits inside the padding; text is drawn cluster-by-cluster.
-        baseline = box_top + TAG_PAD_Y + ascent
+        # Centre the text ink vertically within the fixed box height.
+        ink        = draw.textbbox((0, 0), label, font=tag_font, anchor="ls")
+        ink_center = (ink[1] + ink[3]) / 2              # relative to the baseline
+        baseline   = box_top + box_h / 2 - ink_center
         draw_tracked(
-            draw, (box_left + TAG_PAD_X, baseline), tag_text,
+            draw, (box_left + TAG_PAD_X, baseline), label,
             tag_font, hex_to_rgba(TAG_TEXT_COLOR), tracking,
         )
 
