@@ -35,7 +35,7 @@ BLOCK_LEFT     = 150    # left edge of the red line and the tag
 RED_LINE_W     = 25            # breadth of the line
 RED_LINE_COLOR = "#EA5158"
 RED_LINE_GAP   = 80            # gap between the red line and the title text
-TITLE_PAD_Y    = 26.75         # top & bottom spacing around the title text box
+TITLE_PAD_Y    = 15            # top & bottom spacing around the title text box
                                # (title is centered; red line = box height)
 
 # ── Category tag (above the title) ────────────────────────────────────────────
