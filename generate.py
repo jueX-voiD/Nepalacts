@@ -43,9 +43,7 @@ TAG_BG         = "#145C9E"     # blue background
 TAG_TEXT_COLOR = "#ffffff"
 TAG_PAD_X      = 35            # left/right padding inside the tag
 TAG_PAD_Y      = 20            # top/bottom padding inside the tag
-TAG_TITLE_GAP  = 45            # gap between tag bottom and title top  (tune to Figma)
-TAG_LETTER_SPACING   = 0.10    # 10% of font size, tracked between clusters
-TITLE_LETTER_SPACING = 0.0     # 0% — title has no extra tracking
+TAG_TITLE_GAP  = 50            # gap between the tag bottom and the red line top
 
 # ── Gradient (#181D21, 90% opacity → 0%, bottom → mid-canvas) ───────────────
 GRAD_R, GRAD_G, GRAD_B = 24, 29, 33
@@ -82,6 +80,7 @@ LANG = {
         "tag_font":     _font("Raleway-VariableFont_wght.ttf"),
         "tag_weight":   600,        # SemiBold (variable axis)
         "tag_size":     40,
+        "tag_tracking": 0.10,       # 10% letter-spacing
     },
     "ne": {
         "title_font":   _font("Mukta-Bold.ttf"),
@@ -91,6 +90,7 @@ LANG = {
         "tag_font":     _font("Mukta-SemiBold.ttf"),
         "tag_weight":   None,
         "tag_size":     45,
+        "tag_tracking": 0.0,        # Nepali tag: no letter-spacing
     },
 }
 
@@ -413,7 +413,7 @@ def generate_image(
     # 5. Category tag — box with auto line-height and 10% letter-spacing
     if tag_text:
         tag_font = load_font(cfg["tag_font"], cfg["tag_size"], cfg.get("tag_weight"))
-        tracking = TAG_LETTER_SPACING * cfg["tag_size"]
+        tracking = cfg.get("tag_tracking", 0.0) * cfg["tag_size"]
         ascent, descent = tag_font.getmetrics()
         line_h = ascent + descent                       # "auto" line height
         text_w = tracked_width(draw, tag_text, tag_font, tracking)
@@ -421,7 +421,7 @@ def generate_image(
         box_w      = text_w + 2 * TAG_PAD_X
         box_h      = line_h + 2 * TAG_PAD_Y
         box_left   = BLOCK_LEFT
-        box_bottom = content_top - TAG_TITLE_GAP
+        box_bottom = red_top - TAG_TITLE_GAP            # 50px above the red line top
         box_top    = box_bottom - box_h
 
         draw.rectangle(
