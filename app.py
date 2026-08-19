@@ -170,6 +170,7 @@ def generate_endpoint():
         return jsonify(error=f"Could not fetch article: {e}"), 502
 
     en, np_text, img_url = data["en_headline"], data["np_headline"], data["image_url"]
+    en_tag, np_tag = data["en_category"], data["np_category"]
     if not img_url:
         return jsonify(error="No featured image found for this post."), 404
 
@@ -182,8 +183,8 @@ def generate_endpoint():
     images = []
 
     if en:
-        img = g.generate_image(photo, en, g.FONT_EN_PATH, g.FONT_EN_SIZE,
-                               g.FONT_EN_LH, "#ffffff", offset)
+        img = g.generate_image(photo, en, g.LANG["en"], "#ffffff", offset,
+                               tag_text=en_tag)
         images.append({
             "lang": "English",
             "filename": g.safe_filename(en) + ".png",
@@ -191,8 +192,8 @@ def generate_endpoint():
         })
 
     if np_text:
-        img = g.generate_image(photo, np_text, g.FONT_NP_PATH, g.FONT_NP_SIZE,
-                               g.FONT_NP_LH, "#ffffff", offset)
+        img = g.generate_image(photo, np_text, g.LANG["ne"], "#ffffff", offset,
+                               tag_text=np_tag)
         images.append({
             "lang": "Nepali",
             "filename": g.safe_filename(np_text) + ".png",

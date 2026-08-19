@@ -26,8 +26,22 @@ CANVAS_H     = 2400
 LOGO_LEFT    = 150      # px from left
 LOGO_BOTTOM  = 200      # px from bottom
 HEADLINE_GAP = 100      # px gap between headline bottom and logo top
-TEXT_MARGIN_L = 150     # headline left margin
 TEXT_MARGIN_R = 80      # headline right margin
+
+# ── Left block (red line + tag + title share this left edge) ─────────────────
+BLOCK_LEFT     = 150    # left edge of the red line and the tag
+
+# ── Red accent line (left of the title) ──────────────────────────────────────
+RED_LINE_W     = 25            # breadth of the line
+RED_LINE_COLOR = "#EA5158"
+RED_LINE_GAP   = 80            # gap between the red line and the title text
+
+# ── Category tag (above the title) ────────────────────────────────────────────
+TAG_BG         = "#145C9E"     # blue background
+TAG_TEXT_COLOR = "#ffffff"
+TAG_PAD_X      = 35            # left/right padding inside the tag
+TAG_PAD_Y      = 20            # top/bottom padding inside the tag
+TAG_TITLE_GAP  = 45            # gap between tag bottom and title top  (tune to Figma)
 
 # ── Gradient (#181D21, 90% opacity → 0%, bottom → mid-canvas) ───────────────
 GRAD_R, GRAD_G, GRAD_B = 24, 29, 33
@@ -39,8 +53,9 @@ LOGO_PNG    = Path(__file__).parent / "fonts" / "_logo_cached.png"
 LOGO_W      = 814       # rendered pixel width
 
 # ── Fonts ────────────────────────────────────────────────────────────────────
-# English: Abhaya Libre ExtraBold (serif, matches the reference design)
-# Nepali:  Noto Serif Devanagari Variable (the new Nepali font)
+# English: Raleway (Latin) — variable font, weight axis set per use.
+# Nepali:  Mukta (Devanagari) — Raleway has no Devanagari glyphs, and Mukta is
+#          the font nepalacts.com itself uses. Static weight files.
 FONTS_DIR = Path(__file__).parent / "fonts"
 
 
@@ -53,12 +68,42 @@ def _font(name: str) -> Path:
     return Path.home() / "Library/Fonts" / name
 
 
-FONT_EN_PATH = _font("AbhayaLibre-ExtraBold.ttf")
-FONT_NP_PATH = _font("NotoSerifDevanagari-VariableFont_wdth,wght.ttf")
-FONT_EN_SIZE = 112
-FONT_EN_LH   = 128
-FONT_NP_SIZE = 120
-FONT_NP_LH   = 140
+# Per-language rendering config: title + tag fonts, sizes, weights, line height.
+LANG = {
+    "en": {
+        "title_font":   _font("Raleway-VariableFont_wght.ttf"),
+        "title_weight": 700,        # Bold (variable axis)
+        "title_size":   100,
+        "title_lh":     118,
+        "tag_font":     _font("Raleway-VariableFont_wght.ttf"),
+        "tag_weight":   600,        # SemiBold (variable axis)
+        "tag_size":     40,
+    },
+    "ne": {
+        "title_font":   _font("Mukta-Bold.ttf"),
+        "title_weight": None,       # static weight file
+        "title_size":   100,
+        "title_lh":     140,        # Devanagari needs more room for matras
+        "tag_font":     _font("Mukta-SemiBold.ttf"),
+        "tag_weight":   None,
+        "tag_size":     45,
+    },
+}
+
+
+def load_font(path: Path, size: int, weight=None):
+    """Load a font with the Raqm layout engine (for Devanagari shaping) and,
+    for variable fonts, set the weight axis."""
+    try:
+        f = ImageFont.truetype(str(path), size, layout_engine=ImageFont.Layout.RAQM)
+    except Exception:
+        f = ImageFont.truetype(str(path), size)
+    if weight is not None:
+        try:
+            f.set_variation_by_axes([weight])
+        except Exception:
+            pass
+    return f
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,19 +115,15 @@ def hex_to_rgba(hex_color: str, alpha: int = 255):
 
 
 def check_fonts():
+    needed = {
+        "Raleway-VariableFont_wght.ttf": "https://fonts.google.com/specimen/Raleway",
+        "Mukta-Bold.ttf":                "https://fonts.google.com/specimen/Mukta",
+        "Mukta-SemiBold.ttf":            "https://fonts.google.com/specimen/Mukta",
+    }
     missing = []
-    if not FONT_EN_PATH.exists():
-        missing.append(
-            "AbhayaLibre-ExtraBold.ttf\n"
-            "    Download → https://fonts.google.com/specimen/Abhaya+Libre\n"
-            "    Place in:  fonts/AbhayaLibre-ExtraBold.ttf"
-        )
-    if not FONT_NP_PATH.exists():
-        missing.append(
-            "NotoSerifDevanagari-VariableFont_wdth,wght.ttf\n"
-            "    Download → https://fonts.google.com/noto/specimen/Noto+Serif+Devanagari\n"
-            "    Place in:  fonts/NotoSerifDevanagari-VariableFont_wdth,wght.ttf"
-        )
+    for name, url in needed.items():
+        if not _font(name).exists():
+            missing.append(f"{name}\n    Download → {url}\n    Place in:  fonts/{name}")
     if missing:
         print("\nMissing fonts. Please install them:\n")
         for m in missing:
@@ -135,6 +176,10 @@ query GetPost($slug: String!) {
   postBySlug(slug: $slug) {
     title
     titleNe
+    category {
+      name
+      nameNe
+    }
     image {
       url
     }
@@ -165,10 +210,13 @@ def fetch_article(url: str) -> dict:
         raise RuntimeError(f"GraphQL error: {data['errors'][0]['message']}")
 
     post = (data.get("data") or {}).get("postBySlug") or {}
+    category = post.get("category") or {}
 
     return {
         "en_headline": post.get("title") or None,
         "np_headline": post.get("titleNe") or None,
+        "en_category": category.get("name") or None,
+        "np_category": category.get("nameNe") or None,
         "image_url":   (post.get("image") or {}).get("url") or None,
     }
 
@@ -247,16 +295,16 @@ def wrap_text(text: str, font, max_w: int, draw) -> list:
 def generate_image(
     photo: Image.Image,
     headline: str,
-    font_path: Path,
-    font_size: int,
-    line_height: int,
+    cfg: dict,
     text_color: str,
     offset: tuple,
+    tag_text: str = None,
     out_path: Path = None,
 ):
     # 1. Compose photo with gradient
     img = cover_photo(photo.copy(), *offset)
     img = apply_gradient(img)
+    draw = ImageDraw.Draw(img)
 
     # 2. Paste logo
     logo   = render_logo()
@@ -264,37 +312,49 @@ def generate_image(
     logo_y = CANVAS_H - LOGO_BOTTOM - logo.height
     img.paste(logo, (logo_x, logo_y), logo)
 
-    # 3. Draw headline
-    # Use the Raqm layout engine for proper complex-text shaping (Devanagari
-    # conjuncts and reordered vowel signs). Falls back to basic layout if Raqm
-    # isn't available.
-    try:
-        font = ImageFont.truetype(
-            str(font_path), font_size,
-            layout_engine=ImageFont.Layout.RAQM,
-        )
-    except Exception:
-        font = ImageFont.truetype(str(font_path), font_size)
-    # For variable fonts (like Raleway), set weight axis to ExtraBold (800)
-    try:
-        font.set_variation_by_axes([800])
-    except Exception:
-        pass
-    draw = ImageDraw.Draw(img)
-    max_w = CANVAS_W - TEXT_MARGIN_L - TEXT_MARGIN_R
-    lines = wrap_text(headline, font, max_w, draw)
+    # 3. Title — wrapped, bottom-anchored HEADLINE_GAP above the logo
+    title_font = load_font(cfg["title_font"], cfg["title_size"], cfg.get("title_weight"))
+    title_left = BLOCK_LEFT + RED_LINE_W + RED_LINE_GAP
+    max_w      = CANVAS_W - title_left - TEXT_MARGIN_R
+    lines      = wrap_text(headline, title_font, max_w, draw)
 
-    total_h  = len(lines) * line_height
-    # Headline bottom must be exactly HEADLINE_GAP above logo top
-    text_top = logo_y - HEADLINE_GAP - total_h
-    color    = hex_to_rgba(text_color)
+    lh           = cfg["title_lh"]
+    total_title_h = len(lines) * lh
+    title_bottom = logo_y - HEADLINE_GAP
+    title_top    = title_bottom - total_title_h
+    color        = hex_to_rgba(text_color)
 
     for i, line in enumerate(lines):
+        draw.text((title_left, title_top + i * lh), line, font=title_font, fill=color)
+
+    # 4. Red accent line — same height as the title block, left of the text
+    draw.rectangle(
+        [BLOCK_LEFT, title_top, BLOCK_LEFT + RED_LINE_W, title_top + total_title_h],
+        fill=hex_to_rgba(RED_LINE_COLOR),
+    )
+
+    # 5. Category tag — a filled box above the title
+    if tag_text:
+        tag_font = load_font(cfg["tag_font"], cfg["tag_size"], cfg.get("tag_weight"))
+        tb = draw.textbbox((0, 0), tag_text, font=tag_font)
+        tw, th = tb[2] - tb[0], tb[3] - tb[1]
+
+        box_w      = tw + 2 * TAG_PAD_X
+        box_h      = th + 2 * TAG_PAD_Y
+        box_left   = BLOCK_LEFT
+        box_bottom = title_top - TAG_TITLE_GAP
+        box_top    = box_bottom - box_h
+
+        draw.rectangle(
+            [box_left, box_top, box_left + box_w, box_bottom],
+            fill=hex_to_rgba(TAG_BG),
+        )
+        # Center the text in the box (correct for the glyph bbox offset).
         draw.text(
-            (TEXT_MARGIN_L, text_top + i * line_height),
-            line,
-            font=font,
-            fill=color,
+            (box_left + TAG_PAD_X - tb[0], box_top + TAG_PAD_Y - tb[1]),
+            tag_text,
+            font=tag_font,
+            fill=hex_to_rgba(TAG_TEXT_COLOR),
         )
 
     result = img.convert("RGB")
@@ -324,6 +384,9 @@ Examples:
     ap.add_argument("--output-dir",  default="output",            help="Output directory (default: ./output)")
     ap.add_argument("--en-headline", default=None,                help="Override English headline")
     ap.add_argument("--np-headline", default=None,                help="Override Nepali headline")
+    ap.add_argument("--en-tag",      default=None,                help="Override English category tag")
+    ap.add_argument("--np-tag",      default=None,                help="Override Nepali category tag")
+    ap.add_argument("--no-tag",      action="store_true",         help="Hide the category tag")
     ap.add_argument("--en-color",    default="#ffffff",           help="English text color hex (default: #ffffff)")
     ap.add_argument("--np-color",    default="#ffffff",           help="Nepali text color hex (default: #ffffff)")
     ap.add_argument("--image-url",   default=None,                help="Override featured image URL")
@@ -337,9 +400,11 @@ Examples:
     en      = args.en_headline or data["en_headline"]
     np_text = args.np_headline or data["np_headline"]
     img_url = args.image_url   or data["image_url"]
+    en_tag  = None if args.no_tag else (args.en_tag or data["en_category"])
+    np_tag  = None if args.no_tag else (args.np_tag or data["np_category"])
 
-    print(f"  English : {en or '(not found)'}")
-    print(f"  Nepali  : {np_text or '(not found)'}")
+    print(f"  English : {en or '(not found)'}  [tag: {en_tag or '-'}]")
+    print(f"  Nepali  : {np_text or '(not found)'}  [tag: {np_tag or '-'}]")
     print(f"  Image   : {img_url or '(not found)'}")
 
     if not img_url:
@@ -354,15 +419,15 @@ Examples:
     print("\nGenerating images...")
     if en:
         en_path = unique_path(out, safe_filename(en))
-        generate_image(photo, en, FONT_EN_PATH, FONT_EN_SIZE, FONT_EN_LH,
-                       args.en_color, offset, en_path)
+        generate_image(photo, en, LANG["en"], args.en_color, offset,
+                       tag_text=en_tag, out_path=en_path)
     else:
         print("  ⚠ Skipping English — use --en-headline to set manually.")
 
     if np_text:
         np_path = unique_path(out, safe_filename(np_text))
-        generate_image(photo, np_text, FONT_NP_PATH, FONT_NP_SIZE, FONT_NP_LH,
-                       args.np_color, offset, np_path)
+        generate_image(photo, np_text, LANG["ne"], args.np_color, offset,
+                       tag_text=np_tag, out_path=np_path)
     else:
         print("  ⚠ Skipping Nepali  — use --np-headline to set manually.")
 
