@@ -42,6 +42,8 @@ TAG_TEXT_COLOR = "#ffffff"
 TAG_PAD_X      = 35            # left/right padding inside the tag
 TAG_PAD_Y      = 20            # top/bottom padding inside the tag
 TAG_TITLE_GAP  = 45            # gap between tag bottom and title top  (tune to Figma)
+TAG_LETTER_SPACING   = 0.10    # 10% of font size, tracked between clusters
+TITLE_LETTER_SPACING = 0.0     # 0% — title has no extra tracking
 
 # ── Gradient (#181D21, 90% opacity → 0%, bottom → mid-canvas) ───────────────
 GRAD_R, GRAD_G, GRAD_B = 24, 29, 33
@@ -74,7 +76,7 @@ LANG = {
         "title_font":   _font("Raleway-VariableFont_wght.ttf"),
         "title_weight": 700,        # Bold (variable axis)
         "title_size":   100,
-        "title_lh":     118,
+        "title_lh":     128,
         "tag_font":     _font("Raleway-VariableFont_wght.ttf"),
         "tag_weight":   600,        # SemiBold (variable axis)
         "tag_size":     40,
@@ -83,7 +85,7 @@ LANG = {
         "title_font":   _font("Mukta-Bold.ttf"),
         "title_weight": None,       # static weight file
         "title_size":   100,
-        "title_lh":     140,        # Devanagari needs more room for matras
+        "title_lh":     128,
         "tag_font":     _font("Mukta-SemiBold.ttf"),
         "tag_weight":   None,
         "tag_size":     45,
@@ -292,6 +294,53 @@ def unique_path(directory: Path, base: str, suffix: str = ".png") -> Path:
         n += 1
 
 
+def _is_combining(ch: str) -> bool:
+    """True for Devanagari signs / dependent vowel marks that attach to a base."""
+    o = ord(ch)
+    return (
+        0x0900 <= o <= 0x0903 or   # candrabindu, anusvara, visarga
+        0x093A <= o <= 0x094F or   # matras, virama, etc.
+        0x0951 <= o <= 0x0957 or   # accents
+        0x0962 <= o <= 0x0963 or   # vocalic marks
+        ch in ("‍", "‌")  # ZWJ / ZWNJ
+    )
+
+
+def grapheme_clusters(text: str) -> list:
+    """Split into grapheme clusters so letter-spacing lands between clusters,
+    never inside a Devanagari consonant+matra unit (which would break shaping)."""
+    clusters, cur, join_next = [], "", False
+    for ch in text:
+        if cur == "":
+            cur = ch
+        elif join_next or _is_combining(ch):
+            cur += ch
+        else:
+            clusters.append(cur)
+            cur = ch
+        join_next = (ch == "्")   # virama joins the next consonant (conjunct)
+    if cur:
+        clusters.append(cur)
+    return clusters
+
+
+def tracked_width(draw, text: str, font, tracking: float) -> float:
+    """Total width of `text` with `tracking` px added between clusters."""
+    cls = grapheme_clusters(text)
+    if not cls:
+        return 0.0
+    w = sum(draw.textlength(c, font=font) + tracking for c in cls)
+    return w - tracking          # drop the trailing gap
+
+
+def draw_tracked(draw, xy, text: str, font, fill, tracking: float, anchor="ls"):
+    """Draw `text` cluster-by-cluster with `tracking` px between clusters."""
+    x, y = xy
+    for c in grapheme_clusters(text):
+        draw.text((x, y), c, font=font, fill=fill, anchor=anchor)
+        x += draw.textlength(c, font=font) + tracking
+
+
 def wrap_text(text: str, font, max_w: int, draw) -> list:
     words   = text.split()
     lines   = []
@@ -351,14 +400,16 @@ def generate_image(
         fill=hex_to_rgba(RED_LINE_COLOR),
     )
 
-    # 5. Category tag — a filled box above the title
+    # 5. Category tag — box with auto line-height and 10% letter-spacing
     if tag_text:
         tag_font = load_font(cfg["tag_font"], cfg["tag_size"], cfg.get("tag_weight"))
-        tb = draw.textbbox((0, 0), tag_text, font=tag_font)
-        tw, th = tb[2] - tb[0], tb[3] - tb[1]
+        tracking = TAG_LETTER_SPACING * cfg["tag_size"]
+        ascent, descent = tag_font.getmetrics()
+        line_h = ascent + descent                       # "auto" line height
+        text_w = tracked_width(draw, tag_text, tag_font, tracking)
 
-        box_w      = tw + 2 * TAG_PAD_X
-        box_h      = th + 2 * TAG_PAD_Y
+        box_w      = text_w + 2 * TAG_PAD_X
+        box_h      = line_h + 2 * TAG_PAD_Y
         box_left   = BLOCK_LEFT
         box_bottom = title_top - TAG_TITLE_GAP
         box_top    = box_bottom - box_h
@@ -367,12 +418,11 @@ def generate_image(
             [box_left, box_top, box_left + box_w, box_bottom],
             fill=hex_to_rgba(TAG_BG),
         )
-        # Center the text in the box (correct for the glyph bbox offset).
-        draw.text(
-            (box_left + TAG_PAD_X - tb[0], box_top + TAG_PAD_Y - tb[1]),
-            tag_text,
-            font=tag_font,
-            fill=hex_to_rgba(TAG_TEXT_COLOR),
+        # Baseline sits inside the padding; text is drawn cluster-by-cluster.
+        baseline = box_top + TAG_PAD_Y + ascent
+        draw_tracked(
+            draw, (box_left + TAG_PAD_X, baseline), tag_text,
+            tag_font, hex_to_rgba(TAG_TEXT_COLOR), tracking,
         )
 
     result = img.convert("RGB")
