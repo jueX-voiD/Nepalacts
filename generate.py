@@ -35,6 +35,8 @@ BLOCK_LEFT     = 150    # left edge of the red line and the tag
 RED_LINE_W     = 25            # breadth of the line
 RED_LINE_COLOR = "#EA5158"
 RED_LINE_GAP   = 80            # gap between the red line and the title text
+TITLE_PAD_Y    = 26.75         # top & bottom spacing around the title text box
+                               # (title is centered; red line = box height)
 
 # ── Category tag (above the title) ────────────────────────────────────────────
 TAG_BG         = "#145C9E"     # blue background
@@ -379,24 +381,32 @@ def generate_image(
     logo_y = CANVAS_H - LOGO_BOTTOM - logo.height
     img.paste(logo, (logo_x, logo_y), logo)
 
-    # 3. Title — wrapped, bottom-anchored HEADLINE_GAP above the logo
+    # 3. Title — each line vertically centered in its line box; the text block
+    #    sits HEADLINE_GAP above the logo.
     title_font = load_font(cfg["title_font"], cfg["title_size"], cfg.get("title_weight"))
     title_left = BLOCK_LEFT + RED_LINE_W + RED_LINE_GAP
     max_w      = CANVAS_W - title_left - TEXT_MARGIN_R
     lines      = wrap_text(headline, title_font, max_w, draw)
 
-    lh           = cfg["title_lh"]
-    total_title_h = len(lines) * lh
-    title_bottom = logo_y - HEADLINE_GAP
-    title_top    = title_bottom - total_title_h
-    color        = hex_to_rgba(text_color)
+    lh             = cfg["title_lh"]
+    content_h      = len(lines) * lh
+    content_bottom = logo_y - HEADLINE_GAP
+    content_top    = content_bottom - content_h
+    color          = hex_to_rgba(text_color)
 
+    ascent, descent = title_font.getmetrics()
     for i, line in enumerate(lines):
-        draw.text((title_left, title_top + i * lh), line, font=title_font, fill=color)
+        line_box_top = content_top + i * lh
+        # centre the glyphs within the 128px line box (half-leading top & bottom)
+        baseline = line_box_top + (lh - (ascent + descent)) / 2 + ascent
+        draw.text((title_left, baseline), line, font=title_font, fill=color, anchor="ls")
 
-    # 4. Red accent line — same height as the title block, left of the text
+    # 4. Red accent line — height = title box = content + TITLE_PAD_Y top & bottom,
+    #    with the title vertically centered inside it.
+    red_top    = round(content_top - TITLE_PAD_Y)
+    red_bottom = round(content_bottom + TITLE_PAD_Y)
     draw.rectangle(
-        [BLOCK_LEFT, title_top, BLOCK_LEFT + RED_LINE_W, title_top + total_title_h],
+        [BLOCK_LEFT, red_top, BLOCK_LEFT + RED_LINE_W, red_bottom],
         fill=hex_to_rgba(RED_LINE_COLOR),
     )
 
@@ -411,7 +421,7 @@ def generate_image(
         box_w      = text_w + 2 * TAG_PAD_X
         box_h      = line_h + 2 * TAG_PAD_Y
         box_left   = BLOCK_LEFT
-        box_bottom = title_top - TAG_TITLE_GAP
+        box_bottom = content_top - TAG_TITLE_GAP
         box_top    = box_bottom - box_h
 
         draw.rectangle(
