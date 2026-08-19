@@ -85,7 +85,7 @@ LANG = {
     "ne": {
         "title_font":   _font("Mukta-Bold.ttf"),
         "title_weight": None,       # static weight file
-        "title_size":   100,
+        "title_size":   120,
         "title_lh":     128,
         "tag_font":     _font("Mukta-SemiBold.ttf"),
         "tag_weight":   None,
