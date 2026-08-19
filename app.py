@@ -170,7 +170,7 @@ def generate_endpoint():
         return jsonify(error=f"Could not fetch article: {e}"), 502
 
     en, np_text, img_url = data["en_headline"], data["np_headline"], data["image_url"]
-    en_tag, np_tag = data["en_category"], data["np_category"]
+    en_tag, np_tag = data["en_tag"], data["np_tag"]
     if not img_url:
         return jsonify(error="No featured image found for this post."), 404
 

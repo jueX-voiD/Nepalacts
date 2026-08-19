@@ -176,6 +176,7 @@ query GetPost($slug: String!) {
   postBySlug(slug: $slug) {
     title
     titleNe
+    postType
     category {
       name
       nameNe
@@ -186,6 +187,16 @@ query GetPost($slug: String!) {
   }
 }
 """
+
+# Nepali labels for the post type (the tag). "NEWS" is the common one for now.
+POST_TYPE_NE = {
+    "NEWS":      "समाचार",
+    "VOICES":    "विचार",
+    "OPINION":   "विचार",
+    "INTERVIEW": "अन्तर्वार्ता",
+    "FEATURE":   "फिचर",
+    "ARTICLE":   "लेख",
+}
 
 
 def slug_from_url(url: str) -> str:
@@ -212,11 +223,18 @@ def fetch_article(url: str) -> dict:
     post = (data.get("data") or {}).get("postBySlug") or {}
     category = post.get("category") or {}
 
+    # The tag = the post type (e.g. "NEWS"). Nepali is mapped; falls back to the
+    # category name (or the raw post type) for any unmapped type.
+    post_type = post.get("postType") or None
+    np_category = category.get("nameNe") or None
+    en_tag = post_type
+    np_tag = POST_TYPE_NE.get(post_type) or np_category or post_type
+
     return {
         "en_headline": post.get("title") or None,
         "np_headline": post.get("titleNe") or None,
-        "en_category": category.get("name") or None,
-        "np_category": category.get("nameNe") or None,
+        "en_tag":      en_tag,
+        "np_tag":      np_tag,
         "image_url":   (post.get("image") or {}).get("url") or None,
     }
 
@@ -400,8 +418,8 @@ Examples:
     en      = args.en_headline or data["en_headline"]
     np_text = args.np_headline or data["np_headline"]
     img_url = args.image_url   or data["image_url"]
-    en_tag  = None if args.no_tag else (args.en_tag or data["en_category"])
-    np_tag  = None if args.no_tag else (args.np_tag or data["np_category"])
+    en_tag  = None if args.no_tag else (args.en_tag or data["en_tag"])
+    np_tag  = None if args.no_tag else (args.np_tag or data["np_tag"])
 
     print(f"  English : {en or '(not found)'}  [tag: {en_tag or '-'}]")
     print(f"  Nepali  : {np_text or '(not found)'}  [tag: {np_tag or '-'}]")
