@@ -20,34 +20,50 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
-# ── Canvas & Layout ─────────────────────────────────────────────────────────
-CANVAS_W     = 1926
-CANVAS_H     = 2400
-LOGO_LEFT    = 150      # px from left
-LOGO_BOTTOM  = 200      # px from bottom
-HEADLINE_GAP = 100      # px gap between headline bottom and logo top
-TEXT_MARGIN_R = 80      # headline right margin
-
-# ── Left block (red line + tag + title share this left edge) ─────────────────
-BLOCK_LEFT     = 150    # left edge of the red line and the tag
-
-# ── Red accent line (left of the title) ──────────────────────────────────────
-RED_LINE_W     = 25            # breadth of the line
-RED_LINE_COLOR = "#EA5158"
-RED_LINE_GAP   = 80            # gap between the red line and the title text
-TITLE_PAD_Y    = 15            # top & bottom spacing around the title text box
-                               # (title is centered; red line = box height)
-
-# ── Category tag (above the title) ────────────────────────────────────────────
-TAG_BG         = "#145C9E"     # blue background
+# ── Shared colors ────────────────────────────────────────────────────────────
+RED_LINE_COLOR = "#EA5158"     # red accent line
+TAG_BG         = "#145C9E"     # blue tag background
 TAG_TEXT_COLOR = "#ffffff"
-TAG_PAD_X      = 35            # left/right padding inside the tag
-TAG_BOX_H      = 87            # fixed tag box height (text centered; padding is variable)
-TAG_TITLE_GAP  = 50            # gap between the tag bottom and the red line top
 
 # ── Gradient (#181D21, 90% opacity → 0%, bottom → mid-canvas) ───────────────
 GRAD_R, GRAD_G, GRAD_B = 24, 29, 33
 GRAD_MAX_A = int(0.9 * 255)
+
+# ── Layout variants ──────────────────────────────────────────────────────────
+# Each variant is a full set of geometry. Fonts/weights/tracking live in LANG;
+# per-variant tag sizes live here (they differ between Post and Stories).
+LAYOUTS = {
+    "Post": {
+        "canvas_w": 1926, "canvas_h": 2400,
+        "logo_bottom":     200,    # logo bottom margin from the canvas bottom
+        "logo_title_gap":  100,    # gap between logo top and title bottom
+        "block_left":      150,    # left edge of red line + tag
+        "text_margin_r":   80,     # title right margin
+        "red_line_w":      25,
+        "red_line_gap":    80,     # gap between red line and title text
+        "title_pad_y":     15,     # title box top & bottom spacing (red line = box)
+        "tag_title_gap":   50,     # gap between tag bottom and red line top
+        "tag_box_h":       87,
+        "tag_pad_left":    35,
+        "tag_pad_right":   49,
+        "tag_size":        {"en": 40, "ne": 45},
+    },
+    "Stories": {
+        "canvas_w": 1926, "canvas_h": 3424,
+        "content_from_bottom": 350,   # title box bottom, px from canvas bottom
+        "logo_title_gap":  107,
+        "block_left":      160.5,
+        "text_margin_r":   215.75,
+        "red_line_w":      35.57,
+        "red_line_gap":    80,
+        "title_pad_y":     26.75,
+        "tag_title_gap":   71.33,
+        "tag_box_h":       120,
+        "tag_pad_left":    53.5,
+        "tag_pad_right":   71.33,
+        "tag_size":        {"en": 53.5, "ne": 60},
+    },
+}
 
 # ── Logo ─────────────────────────────────────────────────────────────────────
 LOGO_SVG    = Path(__file__).parent / "Logo.svg"
@@ -79,7 +95,6 @@ LANG = {
         "title_lh":     128,
         "tag_font":     _font("Raleway-VariableFont_wght.ttf"),
         "tag_weight":   600,        # SemiBold (variable axis)
-        "tag_size":     40,
         "tag_tracking": 0.10,       # 10% letter-spacing
         "tag_upper":    True,       # ALL CAPS
     },
@@ -90,7 +105,6 @@ LANG = {
         "title_lh":     128,
         "tag_font":     _font("Mukta-SemiBold.ttf"),
         "tag_weight":   None,
-        "tag_size":     45,
         "tag_tracking": 0.0,        # Nepali tag: no letter-spacing
     },
 }
@@ -250,15 +264,15 @@ def fetch_photo(url: str) -> Image.Image:
     return Image.open(io.BytesIO(r.content)).convert("RGBA")
 
 
-def cover_photo(photo: Image.Image, offset_x=0, offset_y=0) -> Image.Image:
+def cover_photo(photo: Image.Image, canvas_w, canvas_h, offset_x=0, offset_y=0) -> Image.Image:
     """Scale to cover canvas (crop-to-fill), apply offset."""
-    scale = max(CANVAS_W / photo.width, CANVAS_H / photo.height)
+    scale = max(canvas_w / photo.width, canvas_h / photo.height)
     w = int(photo.width * scale)
     h = int(photo.height * scale)
     photo = photo.resize((w, h), Image.LANCZOS)
-    x = (CANVAS_W - w) // 2 + offset_x
-    y = (CANVAS_H - h) // 2 + offset_y
-    canvas = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 255))
+    x = (canvas_w - w) // 2 + offset_x
+    y = (canvas_h - h) // 2 + offset_y
+    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 255))
     canvas.paste(photo, (x, y))
     return canvas
 
@@ -365,75 +379,85 @@ def wrap_text(text: str, font, max_w: int, draw) -> list:
 def generate_image(
     photo: Image.Image,
     headline: str,
-    cfg: dict,
+    layout: dict,
+    lang_key: str,
     text_color: str,
     offset: tuple,
     tag_text: str = None,
     out_path: Path = None,
 ):
+    lang = LANG[lang_key]
+    W, H = layout["canvas_w"], layout["canvas_h"]
+
     # 1. Compose photo with gradient
-    img = cover_photo(photo.copy(), *offset)
+    img = cover_photo(photo.copy(), W, H, *offset)
     img = apply_gradient(img)
     draw = ImageDraw.Draw(img)
 
-    # 2. Paste logo
+    # 2. Logo + title bottom.  Post anchors the logo to the canvas bottom and puts
+    #    the title above it; Stories anchors the title box a fixed distance from the
+    #    bottom and puts the logo below it. Both keep a `logo_title_gap`.
     logo   = render_logo()
-    logo_x = LOGO_LEFT
-    logo_y = CANVAS_H - LOGO_BOTTOM - logo.height
+    logo_x = round(layout["block_left"])
+    if "content_from_bottom" in layout:
+        content_bottom = H - layout["content_from_bottom"]
+        logo_y = round(content_bottom + layout["logo_title_gap"])
+    else:
+        logo_y = H - layout["logo_bottom"] - logo.height
+        content_bottom = logo_y - layout["logo_title_gap"]
     img.paste(logo, (logo_x, logo_y), logo)
 
-    # 3. Title — each line vertically centered in its line box; the text block
-    #    sits HEADLINE_GAP above the logo.
-    title_font = load_font(cfg["title_font"], cfg["title_size"], cfg.get("title_weight"))
-    title_left = BLOCK_LEFT + RED_LINE_W + RED_LINE_GAP
-    max_w      = CANVAS_W - title_left - TEXT_MARGIN_R
+    # 3. Title — each line vertically centered within its line box.
+    title_font = load_font(lang["title_font"], lang["title_size"], lang.get("title_weight"))
+    title_left = layout["block_left"] + layout["red_line_w"] + layout["red_line_gap"]
+    max_w      = W - title_left - layout["text_margin_r"]
     lines      = wrap_text(headline, title_font, max_w, draw)
 
-    lh             = cfg["title_lh"]
-    content_h      = len(lines) * lh
-    content_bottom = logo_y - HEADLINE_GAP
-    content_top    = content_bottom - content_h
-    color          = hex_to_rgba(text_color)
+    lh          = lang["title_lh"]
+    content_h   = len(lines) * lh
+    content_top = content_bottom - content_h
+    color       = hex_to_rgba(text_color)
 
     ascent, descent = title_font.getmetrics()
     for i, line in enumerate(lines):
         line_box_top = content_top + i * lh
-        # centre the glyphs within the 128px line box (half-leading top & bottom)
         baseline = line_box_top + (lh - (ascent + descent)) / 2 + ascent
-        draw.text((title_left, baseline), line, font=title_font, fill=color, anchor="ls")
+        draw.text((round(title_left), baseline), line, font=title_font, fill=color, anchor="ls")
 
-    # 4. Red accent line — height = title box = content + TITLE_PAD_Y top & bottom,
-    #    with the title vertically centered inside it.
-    red_top    = round(content_top - TITLE_PAD_Y)
-    red_bottom = round(content_bottom + TITLE_PAD_Y)
+    # 4. Red accent line — height = title box = content + title_pad_y top & bottom.
+    pad        = layout["title_pad_y"]
+    red_top    = round(content_top - pad)
+    red_bottom = round(content_bottom + pad)
     draw.rectangle(
-        [BLOCK_LEFT, red_top, BLOCK_LEFT + RED_LINE_W, red_bottom],
+        [round(layout["block_left"]), red_top,
+         round(layout["block_left"] + layout["red_line_w"]), red_bottom],
         fill=hex_to_rgba(RED_LINE_COLOR),
     )
 
-    # 5. Category tag — fixed-height box (87px) with the text centered vertically
+    # 5. Category tag — fixed-height box, text centered vertically, asymmetric padding.
     if tag_text:
-        label    = tag_text.upper() if cfg.get("tag_upper") else tag_text
-        tag_font = load_font(cfg["tag_font"], cfg["tag_size"], cfg.get("tag_weight"))
-        tracking = cfg.get("tag_tracking", 0.0) * cfg["tag_size"]
-        text_w   = tracked_width(draw, label, tag_font, tracking)
+        label     = tag_text.upper() if lang.get("tag_upper") else tag_text
+        tag_size  = layout["tag_size"][lang_key]
+        tag_font  = load_font(lang["tag_font"], tag_size, lang.get("tag_weight"))
+        tracking  = lang.get("tag_tracking", 0.0) * tag_size
+        text_w    = tracked_width(draw, label, tag_font, tracking)
 
-        box_w      = text_w + 2 * TAG_PAD_X
-        box_h      = TAG_BOX_H
-        box_left   = BLOCK_LEFT
-        box_bottom = red_top - TAG_TITLE_GAP            # 50px above the red line top
+        box_h      = layout["tag_box_h"]
+        box_left   = layout["block_left"]
+        box_bottom = red_top - layout["tag_title_gap"]
         box_top    = box_bottom - box_h
+        box_right  = box_left + layout["tag_pad_left"] + text_w + layout["tag_pad_right"]
 
         draw.rectangle(
-            [box_left, box_top, box_left + box_w, box_bottom],
+            [round(box_left), round(box_top), round(box_right), round(box_bottom)],
             fill=hex_to_rgba(TAG_BG),
         )
         # Centre the text ink vertically within the fixed box height.
         ink        = draw.textbbox((0, 0), label, font=tag_font, anchor="ls")
-        ink_center = (ink[1] + ink[3]) / 2              # relative to the baseline
+        ink_center = (ink[1] + ink[3]) / 2
         baseline   = box_top + box_h / 2 - ink_center
         draw_tracked(
-            draw, (box_left + TAG_PAD_X, baseline), label,
+            draw, (round(box_left + layout["tag_pad_left"]), baseline), label,
             tag_font, hex_to_rgba(TAG_TEXT_COLOR), tracking,
         )
 
@@ -493,23 +517,23 @@ Examples:
     print("\nFetching photo...")
     photo  = fetch_photo(img_url)
     offset = (args.photo_x, args.photo_y)
-    out    = Path(args.output_dir)
-    out.mkdir(parents=True, exist_ok=True)
+    base   = Path(args.output_dir)
 
-    print("\nGenerating images...")
-    if en:
-        en_path = unique_path(out, safe_filename(en))
-        generate_image(photo, en, LANG["en"], args.en_color, offset,
-                       tag_text=en_tag, out_path=en_path)
-    else:
-        print("  ⚠ Skipping English — use --en-headline to set manually.")
-
-    if np_text:
-        np_path = unique_path(out, safe_filename(np_text))
-        generate_image(photo, np_text, LANG["ne"], args.np_color, offset,
-                       tag_text=np_tag, out_path=np_path)
-    else:
-        print("  ⚠ Skipping Nepali  — use --np-headline to set manually.")
+    # Generate every variant into its own folder (output/Post, output/Stories).
+    for variant, layout in LAYOUTS.items():
+        out = base / variant
+        out.mkdir(parents=True, exist_ok=True)
+        print(f"\nGenerating {variant} images...")
+        if en:
+            generate_image(photo, en, layout, "en", args.en_color, offset,
+                           tag_text=en_tag, out_path=unique_path(out, safe_filename(en)))
+        else:
+            print("  ⚠ Skipping English — use --en-headline to set manually.")
+        if np_text:
+            generate_image(photo, np_text, layout, "ne", args.np_color, offset,
+                           tag_text=np_tag, out_path=unique_path(out, safe_filename(np_text)))
+        else:
+            print("  ⚠ Skipping Nepali  — use --np-headline to set manually.")
 
     print("\nDone.")
 

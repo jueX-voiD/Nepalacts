@@ -51,9 +51,9 @@ PAGE = """
     button:disabled { opacity:.5; cursor:not-allowed; }
     .status { margin-top:18px; font-size:14px; min-height:20px; }
     .status.err { color:#ff8a8a; }
-    .preview { margin-top:24px; display:none; gap:14px; }
+    .preview { margin-top:24px; display:none; gap:14px; flex-wrap:wrap; }
     .preview.show { display:flex; }
-    .preview figure { flex:1; margin:0; text-align:center; }
+    .preview figure { flex:1 1 40%; min-width:150px; margin:0; text-align:center; }
     .preview img { width:100%; border-radius:10px; border:1px solid #2a3138; }
     .preview figcaption { font-size:12px; color:var(--muted); margin-top:8px; }
     .dl { margin-top:6px; display:inline-block; font-size:13px; color:var(--accent); text-decoration:none; }
@@ -118,7 +118,7 @@ btn.addEventListener('click', async () => {
       const im = document.createElement('img');
       im.src = 'data:image/png;base64,' + img.data;
       const cap = document.createElement('figcaption');
-      cap.textContent = img.lang;
+      cap.textContent = (img.variant ? img.variant + ' · ' : '') + img.lang;
       fig.appendChild(im); fig.appendChild(cap);
       preview.appendChild(fig);
     }
@@ -182,23 +182,26 @@ def generate_endpoint():
     offset = (0, 0)
     images = []
 
-    if en:
-        img = g.generate_image(photo, en, g.LANG["en"], "#ffffff", offset,
-                               tag_text=en_tag)
-        images.append({
-            "lang": "English",
-            "filename": g.safe_filename(en) + ".png",
-            "data": image_to_b64(img),
-        })
-
-    if np_text:
-        img = g.generate_image(photo, np_text, g.LANG["ne"], "#ffffff", offset,
-                               tag_text=np_tag)
-        images.append({
-            "lang": "Nepali",
-            "filename": g.safe_filename(np_text) + ".png",
-            "data": image_to_b64(img),
-        })
+    # Generate every variant (Post, Stories) for both languages.
+    for variant, layout in g.LAYOUTS.items():
+        if en:
+            img = g.generate_image(photo, en, layout, "en", "#ffffff", offset,
+                                   tag_text=en_tag)
+            images.append({
+                "lang":     "English",
+                "variant":  variant,
+                "filename": f"{variant}/{g.safe_filename(en)}.png",
+                "data":     image_to_b64(img),
+            })
+        if np_text:
+            img = g.generate_image(photo, np_text, layout, "ne", "#ffffff", offset,
+                                   tag_text=np_tag)
+            images.append({
+                "lang":     "Nepali",
+                "variant":  variant,
+                "filename": f"{variant}/{g.safe_filename(np_text)}.png",
+                "data":     image_to_b64(img),
+            })
 
     if not images:
         return jsonify(error="No headlines found for this post."), 404
